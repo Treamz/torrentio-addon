@@ -3,36 +3,26 @@ const { Type } = require('../lib/types');
 const { isVideo, isArchive } = require('../lib/extension');
 const StaticResponse = require('./static');
 const { getMagnetLink } = require('../lib/magnetHelper');
-const { BadTokenError } = require('./mochHelper');
 
 const KEY = 'alldebrid';
 const AGENT = 'torrentio';
 
 async function getCachedStreams(streams, apiKey) {
-  const options = await getDefaultOptions();
-  const AD = new AllDebridClient(apiKey, options);
-  const hashes = streams.map(stream => stream.infoHash);
-  const available = await AD.magnet.instant(hashes)
-      .catch(error => {
-        if (error && error.code === 'AUTH_BAD_APIKEY') {
-          return Promise.reject(BadTokenError);
-        }
-        console.warn(`Failed AllDebrid cached [${hashes[0]}] torrent availability request:`, error);
-        return undefined;
-      });
-  return available && available.data && available.data.magnets && streams
-      .reduce((mochStreams, stream) => {
-        const cachedEntry = available.data.magnets.find(magnet => stream.infoHash === magnet.hash.toLowerCase());
-        const streamTitleParts = stream.title.replace(/\n👤.*/s, '').split('\n');
-        const fileName = streamTitleParts[streamTitleParts.length - 1];
-        const fileIndex = streamTitleParts.length === 2 ? stream.fileIdx : null;
-        const encodedFileName = encodeURIComponent(fileName);
-        mochStreams[stream.infoHash] = {
-          url: `${apiKey}/${stream.infoHash}/${encodedFileName}/${fileIndex}`,
-          cached: cachedEntry && cachedEntry.instant
-        }
-        return mochStreams;
-      }, {})
+  // AllDebrid retired the magnet/instant endpoint (it now answers 404
+  // "Endpoint doesn't exist"), and a failed availability check used to drop
+  // every stream. Show all torrents instead and let AllDebrid download the
+  // uncached ones on demand - same approach already used for RealDebrid.
+  return streams.reduce((mochStreams, stream) => {
+    const streamTitleParts = stream.title.replace(/\n👤.*/s, '').split('\n');
+    const fileName = streamTitleParts[streamTitleParts.length - 1];
+    const fileIndex = streamTitleParts.length === 2 ? stream.fileIdx : null;
+    const encodedFileName = encodeURIComponent(fileName);
+    mochStreams[stream.infoHash] = {
+      url: `${apiKey}/${stream.infoHash}/${encodedFileName}/${fileIndex}`,
+      cached: true
+    };
+    return mochStreams;
+  }, {});
 }
 
 async function getCatalog(apiKey, offset = 0) {
