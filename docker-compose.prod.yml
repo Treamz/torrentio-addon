@@ -69,8 +69,8 @@ services:
       MONGODB_URI: mongodb://mongo:27017/torrentio
       PORT: 7000
       NODE_ENV: production
-      # Enable database schema sync on startup
-      ENABLE_SYNC: "true"
+      # Optional: external scraper service for on-demand scraping
+      # SCRAPER_URL: http://scraper:7001
       METRICS_USER: ${METRICS_USER:-admin}
       METRICS_PASSWORD: ${METRICS_PASSWORD:-secure_metrics_password}
       CACHE_MAX_AGE: ${CACHE_MAX_AGE:-3600}

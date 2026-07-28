@@ -8,7 +8,7 @@ Based on [torrentio-scraper](https://github.com/TheBeastLT/torrentio-scraper) by
 
 The addon serves Stremio stream requests by querying a PostgreSQL database of torrents and their parsed files. Populating that database is the job of a separate scraper service, which is not part of this repository — the addon works with any database that follows the same schema (see `lib/repository.js` for the models).
 
-If the scraper module is present next to the addon (`../scraper`), on-demand scraping is enabled automatically: when a requested IMDB ID has no results, scrapers are triggered in real time. Without it the addon runs standalone and simply serves what is in the database.
+If an external scraper service is configured via `SCRAPER_URL`, on-demand scraping is enabled: when a requested IMDB ID has no results, the addon calls `POST <SCRAPER_URL>/on-demand` with `{"imdbId", "contentType"}` and re-queries the database once the scraper responds. Without it the addon runs standalone and simply serves what is in the database.
 
 ## Requirements
 
@@ -23,8 +23,9 @@ If the scraper module is present next to the addon (`../scraper`), on-demand scr
 | `DATABASE_URI` | PostgreSQL connection string | required |
 | `MONGODB_URI` | MongoDB connection string for caching | in-memory cache |
 | `PORT` | HTTP port | `7000` |
-| `ENABLE_SYNC` | Sync database schema on startup (full deployment only) | off |
-| `ENABLE_ON_DEMAND_SCRAPING` | Trigger scrapers for unknown IMDB IDs (requires scraper module) | `true` |
+| `SCRAPER_URL` | Base URL of an external scraper service for on-demand scraping | disabled |
+| `SCRAPE_TIMEOUT_MS` | How long to wait for an on-demand scrape response | `60000` |
+| `ENABLE_ON_DEMAND_SCRAPING` | Trigger scrapers for unknown IMDB IDs (requires `SCRAPER_URL`) | `true` |
 | `RESOLVER_HOST` | Public URL of this addon, used for debrid stream resolving | |
 | `CACHE_MAX_AGE` | Stream cache TTL in seconds | `3600` |
 
