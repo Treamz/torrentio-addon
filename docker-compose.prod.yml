@@ -1,0 +1,104 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    restart: unless-stopped
+    networks:
+      - torrentio-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-torrentio}
+      POSTGRES_USER: ${POSTGRES_USER:-torrentio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-your_secure_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - torrentio-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "2"
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    networks:
+      - torrentio-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "2"
+
+  addon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URI: postgresql://${POSTGRES_USER:-torrentio}:${POSTGRES_PASSWORD:-your_secure_password}@postgres:5432/${POSTGRES_DB:-torrentio}
+      MONGODB_URI: mongodb://mongo:27017/torrentio
+      PORT: 7000
+      NODE_ENV: production
+      # Enable database schema sync on startup
+      ENABLE_SYNC: "true"
+      METRICS_USER: ${METRICS_USER:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-secure_metrics_password}
+      CACHE_MAX_AGE: ${CACHE_MAX_AGE:-3600}
+      ENABLE_ON_DEMAND_SCRAPING: ${ENABLE_ON_DEMAND_SCRAPING:-true}
+      RESOLVER_HOST: ${RESOLVER_HOST:-https://${DOMAIN:-torrentio.example.com}}
+    depends_on:
+      - postgres
+      - mongo
+    restart: unless-stopped
+    networks:
+      - torrentio-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.torrentio.rule=Host(`${DOMAIN:-torrentio.example.com}`)"
+      - "traefik.http.routers.torrentio.entrypoints=websecure"
+      - "traefik.http.routers.torrentio.tls.certresolver=letsencrypt"
+      - "traefik.http.services.torrentio.loadbalancer.server.port=7000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+  mongo_data:
+  traefik_letsencrypt:
+
+networks:
+  torrentio-network:
+    driver: bridge

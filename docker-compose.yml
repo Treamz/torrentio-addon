@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: torrentio
+      POSTGRES_USER: torrentio
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+
+  addon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URI: postgresql://torrentio:password@postgres:5432/torrentio
+      MONGODB_URI: mongodb://mongo:27017/torrentio
+      PORT: 7000
+      ENABLE_ON_DEMAND_SCRAPING: "true"
+    ports:
+      - "8000:7000"
+    depends_on:
+      - postgres
+      - mongo
+
+volumes:
+  postgres_data:
+  mongo_data:
