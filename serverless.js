@@ -8,6 +8,13 @@ const { parseConfiguration, PreConfigurations } = require('./lib/configuration')
 const landingTemplate = require('./lib/landingTemplate');
 const moch = require('./moch/moch');
 
+// Behind Cloudflare, traefik replaces X-Forwarded-For with the Cloudflare edge
+// address, which request-ip reads first. CF-Connecting-IP carries the real
+// client address, and debrid services need it (AllDebrid's ip param).
+function getClientIp(req) {
+  return req.headers['cf-connecting-ip'] || requestIp.getClientIp(req);
+}
+
 const router = getRouter({ ...addonInterface, manifest: manifest() });
 
 router.get('/', (_, res) => {
@@ -37,7 +44,7 @@ router.get('/:configuration?/manifest.json', (req, res) => {
 router.get('/:configuration/:resource/:type/:id/:extra?.json', (req, res, next) => {
   const { configuration, resource, type, id } = req.params;
   const extra = req.params.extra ? qs.parse(req.url.split('/').pop().slice(0, -5)) : {}
-  const configValues = { ...extra, ...parseConfiguration(configuration), ip: requestIp.getClientIp(req) };
+  const configValues = { ...extra, ...parseConfiguration(configuration), ip: getClientIp(req) };
   addonInterface.get(resource, type, id, configValues)
       .then(resp => {
         const cacheHeaders = {
@@ -77,7 +84,7 @@ router.get('/:moch/:apiKey/:infoHash/:cachedEntryInfo/:fileIndex/:filename?', (r
     infoHash: req.params.infoHash.toLowerCase(),
     fileIndex: isNaN(req.params.fileIndex) ? undefined : parseInt(req.params.fileIndex),
     cachedEntryInfo: req.params.cachedEntryInfo,
-    ip: requestIp.getClientIp(req),
+    ip: getClientIp(req),
     isBrowser: !userAgent.includes('Stremio') && !!userAgentParser(userAgent).browser.name
   }
   moch.resolve(parameters)
