@@ -6,6 +6,7 @@ const alldebrid = require('./alldebrid');
 const debridlink = require('./debridlink');
 const offcloud = require('./offcloud');
 const putio = require('./putio');
+const torbox = require('./torbox');
 const StaticResponse = require('./static');
 const { cacheWrapResolvedUrl } = require('../lib/cache');
 const { timeout } = require('../lib/promises');
@@ -49,6 +50,13 @@ const MOCHS = {
     instance: offcloud,
     name: 'Offcloud',
     shortName: 'OC',
+    catalog: true
+  },
+  torbox: {
+    key: 'torbox',
+    instance: torbox,
+    name: 'TorBox',
+    shortName: 'TB',
     catalog: true
   },
   putio: {

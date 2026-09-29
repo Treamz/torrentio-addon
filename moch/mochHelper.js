@@ -15,4 +15,16 @@ function streamFilename(stream) {
   return encodeURIComponent(filename)
 }
 
-module.exports = { chunkArray, BadTokenError, streamFilename }
+// Whether filename ends with expectedFilename; '�' in the expected name
+// (an undecodable character) matches anything.
+function sameFilename(filename, expectedFilename) {
+  const offset = filename.length - expectedFilename.length;
+  for (let i = 0; i < expectedFilename.length; i++) {
+    if (filename[offset + i] !== expectedFilename[i] && expectedFilename[i] !== '�') {
+      return false;
+    }
+  }
+  return true;
+}
+
+module.exports = { chunkArray, BadTokenError, streamFilename, sameFilename }
