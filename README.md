@@ -1,6 +1,6 @@
 # Torrentio Addon
 
-Stremio addon that provides torrent streams from a database of scraped torrent providers, with optional debrid service integration (RealDebrid, Premiumize, AllDebrid, Put.io and others).
+Stremio addon that provides torrent streams from a database of scraped torrent providers, with optional debrid service integration (RealDebrid, Premiumize, AllDebrid, TorBox, Put.io and others).
 
 Based on [torrentio-scraper](https://github.com/TheBeastLT/torrentio-scraper) by TheBeastLT.
 
