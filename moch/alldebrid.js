@@ -63,9 +63,9 @@ async function getItemMeta(itemId, apiKey) {
 }
 
 async function resolve({ ip, apiKey, infoHash, cachedEntryInfo, fileIndex }) {
-  console.log(`Unrestricting AllDebrid ${infoHash} [${fileIndex}]`);
+  console.log(`Unrestricting AllDebrid ${infoHash} [${fileIndex}] for IP ${ip}`);
   const options = await getDefaultOptions(ip);
-  const AD = new AllDebridClient(apiKey, options);
+  const AD = withUserIp(new AllDebridClient(apiKey, options), ip);
 
   return _resolve(AD, infoHash, cachedEntryInfo, fileIndex)
       .catch(error => {
@@ -144,6 +144,23 @@ async function getDefaultOptions(ip) {
   // must reach it through a residential proxy (http://user:pass@host:port).
   const proxy = process.env.ALLDEBRID_PROXY;
   return { base_agent: AGENT, timeout: 30000, ...(proxy && { proxy }) };
+}
+
+// AllDebrid rejects magnet uploads and link unlocks from datacenter IPs
+// (NO_SERVER). Its api takes the end user's IP as an `ip` param, as
+// MediaFusion sends it. The client library replaces any default query
+// string, so the param is merged into every request here instead.
+function withUserIp(AD, ip) {
+  if (!ip) {
+    return AD;
+  }
+  const request = AD._request.bind(AD);
+  AD._request = (endpoint, o = {}) => request(endpoint, {
+    ...o,
+    qs: { ...o.qs, ip },
+    ...(o.form && { form: { ...o.form, ip } })
+  });
+  return AD;
 }
 
 function statusError(statusCode) {
