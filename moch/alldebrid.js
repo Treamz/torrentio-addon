@@ -6,6 +6,8 @@ const { getMagnetLink } = require('../lib/magnetHelper');
 
 const KEY = 'alldebrid';
 const AGENT = 'torrentio';
+// v4 magnet/status is DISCONTINUED; v4.1 serves every endpoint used here.
+const BASE_URL = 'https://api.alldebrid.com/v4.1/';
 
 async function getCachedStreams(streams, apiKey) {
   // AllDebrid retired the magnet/instant endpoint (it now answers 404
@@ -45,13 +47,13 @@ async function getCatalog(apiKey, offset = 0) {
 async function getItemMeta(itemId, apiKey) {
   const options = await getDefaultOptions();
   const AD = new AllDebridClient(apiKey, options);
-  return AD.magnet.status(itemId)
-      .then(response => response.data.magnets)
-      .then(torrent => ({
+  const torrent = await AD.magnet.status(itemId).then(firstMagnet);
+  const files = await _getTorrentFiles(AD, torrent.id);
+  return {
         id: `${KEY}:${torrent.id}`,
         type: Type.OTHER,
         name: torrent.filename,
-        videos: torrent.links
+        videos: files
             .filter(file => isVideo(file.filename))
             .map((file, index) => ({
               id: `${KEY}:${torrent.id}:${index}`,
@@ -59,7 +61,7 @@ async function getItemMeta(itemId, apiKey) {
               released: new Date(torrent.uploadDate * 1000 - index).toISOString(),
               streams: [{ url: `${apiKey}/${torrent.hash.toLowerCase()}/${encodeURIComponent(file.filename)}/${index}` }]
             }))
-      }))
+  };
 }
 
 async function resolve({ ip, apiKey, infoHash, cachedEntryInfo, fileIndex }) {
@@ -98,8 +100,7 @@ async function _createOrFindTorrent(AD, infoHash) {
 }
 
 async function _retryCreateTorrent(AD, infoHash, encodedFileName, fileIndex) {
-  const newTorrentId = await _createTorrent(AD, infoHash);
-  const newTorrent = await AD.magnet.status(newTorrentId);
+  const newTorrent = await _createTorrent(AD, infoHash);
   return newTorrent && statusReady(newTorrent.statusCode)
       ? _unrestrictLink(AD, newTorrent, encodedFileName, fileIndex)
       : StaticResponse.FAILED_DOWNLOAD;
@@ -107,7 +108,7 @@ async function _retryCreateTorrent(AD, infoHash, encodedFileName, fileIndex) {
 
 async function _findTorrent(AD, infoHash) {
   const torrents = await AD.magnet.status().then(response => response.data.magnets);
-  const foundTorrents = torrents.filter(torrent => torrent.hash.toLowerCase() === infoHash);
+  const foundTorrents = torrents.filter(torrent => (torrent.hash || '').toLowerCase() === infoHash);
   const nonFailedTorrent = foundTorrents.find(torrent => !statusError(torrent.statusCode));
   const foundTorrent = nonFailedTorrent || foundTorrents[0];
   return foundTorrent || Promise.reject('No recent torrent found');
@@ -115,19 +116,41 @@ async function _findTorrent(AD, infoHash) {
 
 async function _createTorrent(AD, infoHash) {
   const magnetLink = await getMagnetLink(infoHash);
-  const uploadResponse = await AD.magnet.upload(magnetLink);
-  const torrentId = uploadResponse.data.magnets[0].id;
-  return AD.magnet.status(torrentId).then(statusResponse => statusResponse.data.magnets);
+  const uploaded = await AD.magnet.upload(magnetLink).then(firstMagnet);
+  if (!uploaded || uploaded.error) {
+    return Promise.reject(uploaded && uploaded.error);
+  }
+  return AD.magnet.status(uploaded.id).then(firstMagnet);
+}
+
+// v4.1 magnet/status no longer lists links; they come from magnet/files as a
+// tree of { n: name, s: size, l: link, e: entries }.
+async function _getTorrentFiles(AD, torrentId) {
+  const response = await AD._get('magnet/files', { qs: { 'id[]': torrentId } });
+  return flattenFiles((response.data.magnets || []).flatMap(magnet => magnet.files || []));
+}
+
+function flattenFiles(nodes) {
+  return nodes.flatMap(node => node.e
+      ? flattenFiles(node.e)
+      : [{ filename: node.n, size: node.s, link: node.l }]);
+}
+
+// data.magnets is an array for list/upload calls and an object for a single id
+function firstMagnet(response) {
+  const magnets = response.data.magnets;
+  return Array.isArray(magnets) ? magnets[0] : magnets;
 }
 
 async function _unrestrictLink(AD, torrent, encodedFileName, fileIndex) {
   const targetFileName = decodeURIComponent(encodedFileName);
-  const videos = torrent.links.filter(link => isVideo(link.filename));
+  const files = await _getTorrentFiles(AD, torrent.id);
+  const videos = files.filter(file => isVideo(file.filename));
   const targetVideo = Number.isInteger(fileIndex)
       ? videos.find(video => targetFileName.includes(video.filename))
       : videos.sort((a, b) => b.size - a.size)[0];
 
-  if (!targetVideo && torrent.links.every(link => isArchive(link.filename))) {
+  if (!targetVideo && files.every(file => isArchive(file.filename))) {
     console.log(`Only AllDebrid archive is available for [${torrent.hash}] ${encodedFileName}`)
     return StaticResponse.FAILED_RAR;
   }
@@ -143,7 +166,7 @@ async function getDefaultOptions(ip) {
   // AllDebrid rejects datacenter IPs with NO_SERVER, so a VPS-hosted addon
   // must reach it through a residential proxy (http://user:pass@host:port).
   const proxy = process.env.ALLDEBRID_PROXY;
-  return { base_agent: AGENT, timeout: 30000, ...(proxy && { proxy }) };
+  return { base_agent: AGENT, base_url: BASE_URL, timeout: 30000, ...(proxy && { proxy }) };
 }
 
 // AllDebrid rejects magnet uploads and link unlocks from datacenter IPs
