@@ -140,7 +140,10 @@ async function _unrestrictLink(AD, torrent, encodedFileName, fileIndex) {
 }
 
 async function getDefaultOptions(ip) {
-  return { base_agent: AGENT, timeout: 30000 };
+  // AllDebrid rejects datacenter IPs with NO_SERVER, so a VPS-hosted addon
+  // must reach it through a residential proxy (http://user:pass@host:port).
+  const proxy = process.env.ALLDEBRID_PROXY;
+  return { base_agent: AGENT, timeout: 30000, ...(proxy && { proxy }) };
 }
 
 function statusError(statusCode) {
