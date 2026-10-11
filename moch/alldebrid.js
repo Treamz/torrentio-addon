@@ -67,7 +67,7 @@ async function getItemMeta(itemId, apiKey) {
 async function resolve({ ip, apiKey, infoHash, cachedEntryInfo, fileIndex }) {
   console.log(`Unrestricting AllDebrid ${infoHash} [${fileIndex}] for IP ${ip}`);
   const options = await getDefaultOptions(ip);
-  const AD = withUserIp(new AllDebridClient(apiKey, options), ip);
+  const AD = withFailureLog(withUserIp(new AllDebridClient(apiKey, options), ip));
 
   return _resolve(AD, infoHash, cachedEntryInfo, fileIndex)
       .catch(error => {
@@ -183,6 +183,21 @@ function withUserIp(AD, ip) {
     qs: { ...o.qs, ip },
     ...(o.form && { form: { ...o.form, ip } })
   });
+  return AD;
+}
+
+// Names the api call that failed and how long it took. A failed lookup of the
+// existing magnets is otherwise swallowed by the fallback to uploading one.
+function withFailureLog(AD) {
+  const request = AD._request.bind(AD);
+  AD._request = (endpoint, o) => {
+    const startedAt = Date.now();
+    return request(endpoint, o).catch(error => {
+      const reason = (error && (error.code || error.message)) || error;
+      console.log(`AllDebrid ${endpoint} failed after ${Date.now() - startedAt}ms: ${reason}`);
+      return Promise.reject(error);
+    });
+  };
   return AD;
 }
 
