@@ -157,7 +157,11 @@ async function _unrestrictLink(apiKey, torrent, cachedEntryInfo, fileIndex) {
   const videos = files
       .filter(file => isVideo(file.short_name))
       .sort((a, b) => b.size - a.size);
-  const targetVideo = Number.isInteger(fileIndex)
+  // When the database has no file entry for a torrent, the stream carries the
+  // torrent title instead of a file name, which no file can match: take the
+  // largest video then. A real file name that matches nothing stays an error
+  // rather than playing some other episode of a pack.
+  const targetVideo = Number.isInteger(fileIndex) && isVideo(targetFileName)
       ? videos.find(video => sameFilename(video.name, targetFileName))
       : videos[0];
 
