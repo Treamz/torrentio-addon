@@ -151,26 +151,36 @@ function processMochResults(streams, config, results) {
 
   const includeTorrentLinks = options.includeTorrentLinks(config);
   const excludeDownloadLinks = options.excludeDownloadLinks(config);
+  const includeSaveLinks = options.includeSaveLinks(config);
   const mochResults = results.filter(result => result && result.mochStreams);
 
-  const cachedStreams = mochResults
-      .reduce((resultStreams, mochResult) => populateCachedLinks(resultStreams, mochResult), streams);
+  const cachedStreams = mochResults.reduce(
+      (resultStreams, mochResult) => populateCachedLinks(resultStreams, mochResult, includeSaveLinks), streams);
   const resultStreams = excludeDownloadLinks ? cachedStreams : populateDownloadLinks(cachedStreams, mochResults);
-  return includeTorrentLinks ? resultStreams : resultStreams.filter(stream => stream.url);
+  return includeTorrentLinks ? resultStreams : resultStreams.filter(stream => stream.url || stream.externalUrl);
 }
 
-function populateCachedLinks(streams, mochResult) {
-  return streams.map(stream => {
+function populateCachedLinks(streams, mochResult, includeSaveLinks) {
+  return streams.flatMap(stream => {
     const cachedEntry = stream.infoHash && mochResult.mochStreams[stream.infoHash];
     if (cachedEntry && cachedEntry.cached) {
-      return {
+      const resolvePath = `${mochResult.moch.key}/${cachedEntry.url}/${streamFilename(stream)}`;
+      const cachedStream = {
         name: `[${mochResult.moch.shortName}+] ${stream.name}`,
         title: stream.title,
-        url: `${RESOLVER_HOST}/${mochResult.moch.key}/${cachedEntry.url}/${streamFilename(stream)}`,
+        url: `${RESOLVER_HOST}/${resolvePath}`,
         behaviorHints: stream.behaviorHints
       };
+      // externalUrl makes Stremio open the link in the device's browser, which
+      // is redirected to the debrid file and saves it.
+      const saveStream = {
+        name: `[${mochResult.moch.shortName} ⬇ save] ${stream.name}`,
+        title: stream.title,
+        externalUrl: `${RESOLVER_HOST}/save/${resolvePath}`
+      };
+      return includeSaveLinks ? [cachedStream, saveStream] : [cachedStream];
     }
-    return stream;
+    return [stream];
   });
 }
 

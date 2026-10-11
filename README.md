@@ -8,6 +8,8 @@ Based on [torrentio-scraper](https://github.com/TheBeastLT/torrentio-scraper) by
 
 The addon serves Stremio stream requests by querying a PostgreSQL database of torrents and their parsed files. Populating that database is the job of a separate scraper service, which is not part of this repository — the addon works with any database that follows the same schema (see `lib/repository.js` for the models).
 
+With a debrid service configured, the "Show links to save the file to this device" debrid option adds a `⬇ save` entry under each cached stream. Stremio opens it in the device's browser, the addon redirects to the debrid file, and the browser saves it — the file goes straight from the debrid service to the device.
+
 If an external scraper service is configured via `SCRAPER_URL`, on-demand scraping is enabled: when a requested IMDB ID has no results, the addon calls `POST <SCRAPER_URL>/on-demand` with `{"imdbId", "contentType"}` and re-queries the database once the scraper responds. Without it the addon runs standalone and simply serves what is in the database.
 
 ## Requirements
